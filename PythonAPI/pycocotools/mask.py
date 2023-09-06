@@ -90,6 +90,12 @@ def decode(rleObjs):
     else:
         return _mask.decode([rleObjs])[:,:,0]
 
+def decode_orderc_channelfirst(rleObjs):
+    if type(rleObjs) == list:
+        return _mask.decode_orderc_channelfirst(rleObjs)
+    else:
+        return _mask.decode_orderc_channelfirst([rleObjs])[0]
+
 def area(rleObjs):
     if type(rleObjs) == list:
         return _mask.area(rleObjs)

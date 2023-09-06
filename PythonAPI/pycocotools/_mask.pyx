@@ -41,6 +41,7 @@ cdef extern from "maskApi.h":
     void rlesInit( RLE **R, siz n )
     void rleEncode( RLE *R, const byte *M, siz h, siz w, siz n )
     void rleDecode( const RLE *R, byte *mask, siz n )
+    void rleDecode_orderc_channelfirst( const RLE *R, byte *mask, siz n)
     void rleMerge( const RLE *R, RLE *M, siz n, int intersect )
     void rleArea( const RLE *R, siz n, uint *a )
     void rleIou( RLE *dt, RLE *gt, siz m, siz n, byte *iscrowd, double *o )
@@ -148,6 +149,21 @@ def decode(rleObjs):
     masks = Masks(h, w, n)
     rleDecode(<RLE*>Rs._R, masks._mask, n);
     return np.array(masks)
+
+def decode_orderc_channelfirst(rleObjs):
+    cdef RLEs Rs = _frString(rleObjs)
+    h, w, n = Rs._R[0].h, Rs._R[0].w, Rs._n
+    masks = Masks(h, w, n)
+    rleDecode_orderc_channelfirst(<RLE*>Rs._R, masks._mask, n);
+
+    cdef np.npy_intp shape[1]
+    shape[0] = <np.npy_intp> n*h*w
+    # Create a 1D array, and reshape it to c raw-major array
+    ndarray = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT8, masks._mask).reshape((n, h, w), order='C')
+    # The _mask allocated by Masks is now handled by ndarray
+    PyArray_ENABLEFLAGS(ndarray, np.NPY_OWNDATA)
+    return ndarray
+
 
 def merge(rleObjs, intersect=0):
     cdef RLEs Rs = _frString(rleObjs)
