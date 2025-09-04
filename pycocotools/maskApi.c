@@ -7,6 +7,8 @@
 #include "maskApi.h"
 #include <math.h>
 #include <stdlib.h>
+#include <omp.h>
+#include <stdio.h>
 
 uint umin( uint a, uint b ) { return (a<b) ? a : b; }
 uint umax( uint a, uint b ) { return (a>b) ? a : b; }
@@ -40,10 +42,62 @@ void rleEncode( RLE *R, const byte *M, siz h, siz w, siz n ) {
   free(cnts);
 }
 
-void rleDecode( const RLE *R, byte *M, siz n ) {
-  siz i, j, k; for( i=0; i<n; i++ ) {
-    byte v=0; for( j=0; j<R[i].m; j++ ) {
-      for( k=0; k<R[i].cnts[j]; k++ ) *(M++)=v; v=!v; }}
+// void rleDecode( const RLE *R, byte *M, siz n ) {
+//   siz i, j, k; for( i=0; i<n; i++ ) {
+//     byte v=0; for( j=0; j<R[i].m; j++ ) {
+//       for( k=0; k<R[i].cnts[j]; k++ ) *(M++)=v; v=!v; }}
+// }
+void rleDecodeThread(const RLE *R, byte *M, siz i) {
+  siz j, k;
+  // byte *M_this = M;
+  // for (siz i0=0; i0<i; i0++){
+  //   M_this += R[i0].m;
+  // }
+  siz H = R[i].h;
+  siz W = R[i].w;
+  byte *M_this = &M[i*H*W];
+  byte v=0; for( j=0; j<R[i].m; j++ ) {
+      for( k=0; k<R[i].cnts[j]; k++ ) *(M_this++)=v; v=!v; }
+}
+
+void rleDecode( const RLE *R, byte *M, siz n) {
+#pragma omp parallel num_threads(3)
+  {
+#pragma omp for 
+      for(siz i=0; i<n; i++ ) {
+        rleDecodeThread(R,M,i);
+      }
+  }
+}
+
+
+void rleDecodeThread_orderc_channelfirst(const RLE *R, byte *M, siz i) {
+  siz j, k;
+  siz H = R[i].h;
+  siz W = R[i].w;
+  byte *M_this = &M[i*H*W];
+  byte *fortran_buffer = (byte*)malloc(sizeof(byte)*H*W);
+  byte *fortran_buffer0 = fortran_buffer;
+  byte v=0; for( j=0; j<R[i].m; j++ ) {
+    for( k=0; k<R[i].cnts[j]; k++ ) *(fortran_buffer++)=v; v=!v; }
+
+  for (siz iw = 0; iw < W; iw++) {
+    for (siz jh = 0; jh < H; jh++) {
+      M_this[jh*W + iw] = fortran_buffer0[iw*H + jh];
+        // M_this[0] = fortran_buffer0[iw*H + jh];
+    }
+  }
+  free(fortran_buffer0);
+}
+
+void rleDecode_orderc_channelfirst( const RLE *R, byte *M, siz n) {
+#pragma omp parallel num_threads(3)
+  {
+#pragma omp for 
+      for(siz i=0; i<n; i++ ) {
+        rleDecodeThread_orderc_channelfirst(R,M,i);
+      }
+  }
 }
 
 void rleMerge( const RLE *R, RLE *M, siz n, int intersect ) {
